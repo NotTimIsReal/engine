@@ -1,0 +1,13 @@
+[package]
+name = "game"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rustpython = { version = "0.3.0", features = ["ssl"] }
+sdl2 = { version = "0.36.0", features = ["bundled", "ttf", "use_mac_framework", "image"] }
+malachite-bigint = { version = "=0.1.0" }
+malachite-q = "=0.3.2"
+malachite-base = "=0.3.2"
