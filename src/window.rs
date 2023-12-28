@@ -1,17 +1,32 @@
-use sdl2;
+use sdl2::{self, video::Window};
 
-struct Engine {
+use crate::renderer::Renderer;
+
+pub struct Engine {
     sdl_context: sdl2::Sdl,
     video_subsystem: sdl2::VideoSubsystem,
-    window: sdl2::video::Window,
-    canvas: sdl2::render::Canvas<sdl2::video::Window>,
+    //canvas: &'a sdl2::render::Canvas<sdl2::video::Window>,
+    renderer: Renderer,
 }
-
 impl Engine {
-    fn new() -> Engine {
+    pub async fn new() -> Engine {
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
         // Set the hint based on the platform
+        let mut windowbuilder = video_subsystem.window("Game", 800, 600);
+
+        #[cfg(target_os = "macos")]
+        windowbuilder.metal_view();
+        #[cfg(target_os = "windows")]
+        windowbuilder.vulkan();
+        #[cfg(target_os = "linux")]
+        windowbuilder.opengl();
+        let window = windowbuilder
+            .fullscreen_desktop()
+            .position_centered()
+            .build()
+            .unwrap();
+
         #[cfg(target_os = "macos")]
         sdl2::hint::set("SDL_RENDER_DRIVER", "metal");
 
@@ -20,29 +35,30 @@ impl Engine {
 
         #[cfg(target_os = "linux")]
         sdl2::hint::set("SDL_RENDER_DRIVER", "vulkan");
-        let window = video_subsystem
-            .window("Game", 800, 600)
-            .position_centered()
-            .build()
-            .unwrap();
-        let canvas = window.into_canvas().build().unwrap();
+        let renderer = Renderer::new(window).await;
+        // let canvas = &window.into_canvas().build().unwrap();
+
         Engine {
             sdl_context,
             video_subsystem,
-            window,
-            canvas,
+            // canvas,
+            renderer,
         }
         //depending on the platform, use vulkan,opengl or metal
     }
-    fn run(&mut self) {
+    pub fn run(&mut self) {
         let mut event_pump = self.sdl_context.event_pump().unwrap();
+        self.renderer.render();
         'running: loop {
             for event in event_pump.poll_iter() {
                 match event {
                     sdl2::event::Event::Quit { .. } => break 'running,
+                    sdl2::event::Event::KeyDown { keycode, .. } => {}
+                    //redraw requested
                     _ => {}
                 }
             }
         }
+        //cleanup
     }
 }
