@@ -48,15 +48,40 @@ impl Engine {
     }
     pub fn run(&mut self) {
         let mut event_pump = self.sdl_context.event_pump().unwrap();
-        self.renderer.render();
+
         'running: loop {
             for event in event_pump.poll_iter() {
                 match event {
                     sdl2::event::Event::Quit { .. } => break 'running,
-                    sdl2::event::Event::KeyDown { keycode, .. } => {}
+                    sdl2::event::Event::KeyDown { keycode, .. } => match keycode {
+                        Some(sdl2::keyboard::Keycode::W) => {
+                            self.renderer
+                                .camera_controller
+                                .process_keyboard(crate::camera::CameraMovement::Forward);
+                        }
+                        Some(sdl2::keyboard::Keycode::A) => {
+                            self.renderer
+                                .camera_controller
+                                .process_keyboard(crate::camera::CameraMovement::Left);
+                        }
+                        Some(sdl2::keyboard::Keycode::S) => {
+                            self.renderer
+                                .camera_controller
+                                .process_keyboard(crate::camera::CameraMovement::Backward);
+                        }
+                        Some(sdl2::keyboard::Keycode::D) => {
+                            self.renderer
+                                .camera_controller
+                                .process_keyboard(crate::camera::CameraMovement::Right);
+                        }
+                        _ => {}
+                    },
                     //redraw requested
                     _ => {}
                 }
+
+                self.renderer.update();
+                self.renderer.render();
             }
         }
         //cleanup
