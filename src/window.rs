@@ -1,9 +1,9 @@
 use crate::renderer::Renderer;
 use winit::{
     event::{ElementState, Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::EventLoop,
     keyboard::Key,
-    platform::{macos::WindowExtMacOS, modifier_supplement::KeyEventExtModifierSupplement},
+    platform::modifier_supplement::KeyEventExtModifierSupplement,
     window::{Fullscreen, WindowBuilder},
 };
 
