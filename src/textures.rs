@@ -13,24 +13,27 @@ impl Texture {
         bytes: &[u8],
         label: &str,
         queue: &wgpu::Queue,
+        is_normal_map: bool,
     ) -> Result<Self, image::ImageError> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, &img, Some(label), queue)
+        Self::from_image(device, &img, Some(label), queue, is_normal_map)
     }
     pub fn from_location(
         device: &wgpu::Device,
         location: &str,
         label: &str,
         queue: &wgpu::Queue,
+        is_normal_map: bool,
     ) -> Result<Self, image::ImageError> {
         let img = image::open(location)?;
-        Self::from_image(device, &img, Some(label), queue)
+        Self::from_image(device, &img, Some(label), queue, is_normal_map)
     }
     pub fn from_image(
         device: &wgpu::Device,
         img: &image::DynamicImage,
         label: Option<&str>,
         queue: &wgpu::Queue,
+        is_normal_map: bool,
     ) -> Result<Self, image::ImageError> {
         let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
@@ -39,13 +42,19 @@ impl Texture {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
+        let format = if is_normal_map {
+            wgpu::TextureFormat::Rgba8Unorm
+        } else {
+            wgpu::TextureFormat::Rgba8UnormSrgb
+        };
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });

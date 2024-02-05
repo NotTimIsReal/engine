@@ -29,6 +29,7 @@ impl Engine {
     pub fn run(mut self) {
         self.event_loop
             .run(move |event, elwt| {
+                let time_now = std::time::Instant::now();
                 if let Event::WindowEvent { event, .. } = event {
                     match event {
                         WindowEvent::KeyboardInput { event, .. } => {
@@ -71,6 +72,12 @@ impl Engine {
                 }
                 self.renderer.update();
                 self.renderer.render();
+                // std::thread::sleep(std::time::Duration::from_millis(16 / 2));
+                let time_elapsed = time_now.elapsed();
+                let avg_fps: f64 = 1.0 / (time_elapsed.as_secs_f64());
+                //only print when build config is debug
+                #[cfg(debug_assertions)]
+                println!("FPS: {}", avg_fps.round());
             })
             .unwrap();
         //cleanup

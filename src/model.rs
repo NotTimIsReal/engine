@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use wgpu::Device;
+
 use crate::{camera, textures};
 
 pub trait Vertex {
@@ -11,6 +13,8 @@ pub struct ModelVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
+    pub tangent: [f32; 3],
+    pub bitangent: [f32; 3],
 }
 #[derive(Debug)]
 pub struct Model {
@@ -22,6 +26,7 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: textures::Texture,
     pub bind_group: wgpu::BindGroup,
+    pub normal_texture: textures::Texture,
 }
 #[derive(Debug)]
 pub struct Mesh {
@@ -31,7 +36,44 @@ pub struct Mesh {
     pub num_elements: u32,
     pub material: usize,
 }
-
+impl Material {
+    pub fn new(
+        device: &wgpu::Device,
+        name: &str,
+        diffuse_texture: textures::Texture,
+        normal_texture: textures::Texture,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
+                },
+            ],
+            label: Some(name),
+        });
+        Self {
+            name: name.to_string(),
+            diffuse_texture,
+            bind_group,
+            normal_texture,
+        }
+    }
+}
 impl Vertex for ModelVertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
@@ -52,6 +94,16 @@ impl Vertex for ModelVertex {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
                     shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
