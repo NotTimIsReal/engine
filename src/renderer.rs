@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use crate::{
-    camera::{Camera, CameraController, CameraUniform},
+    camera::{Camera, CameraController, CameraUniform, Projection},
     model::{self, Vertex},
     resources,
     textures::Texture,
@@ -7,6 +9,7 @@ use crate::{
 use bytemuck;
 use cgmath::prelude::*;
 use wgpu::{self, util::DeviceExt};
+use winit::window::CursorGrabMode;
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
 
@@ -96,6 +99,7 @@ pub struct Renderer {
     light_bind_group: wgpu::BindGroup,
     light_uniform: LightUniform,
     light_render_pipeline: wgpu::RenderPipeline,
+    projection: Projection,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -183,28 +187,22 @@ impl Renderer {
                         },
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry{
-                        binding:3,
-                        visibility:wgpu::ShaderStages::FRAGMENT,
-                        ty:wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count:None,
-                    }
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
                 ],
 
                 label: Some("texture_bind_group_layout"),
             });
 
-        let camera = Camera {
-            eye: (0.0, 1.0, 2.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
-            aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
+        let camera = Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+        let projection =
+            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update_view_proj(&camera, &projection);
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[camera_uniform]),
@@ -305,7 +303,7 @@ impl Renderer {
         };
         let obj_model =
             resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout).unwrap();
-        let camera_controller = CameraController::new(0.2);
+        let camera_controller = CameraController::new(40.0, 1.0);
         const SPACE_BETWEEN: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW)
             .flat_map(|z| {
@@ -352,7 +350,11 @@ impl Renderer {
             instances,
             instance_buffer,
             depth_texture,
+            projection,
         }
+    }
+    pub fn window(&self) -> &winit::window::Window {
+        &self.window
     }
     pub fn render(&mut self) {
         let surface_texture = self.surface.get_current_texture().unwrap();
@@ -410,25 +412,36 @@ impl Renderer {
         self.queue.submit([encoder.finish()]);
         surface_texture.present();
     }
-    pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+    pub fn update(&mut self, delta_time: Duration) -> Result<(), anyhow::Error> {
+        // if self.window.has_focus() {
+        //     self.window.set_cursor_hittest(false)?
+        // } else {
+        //     self.window.set_cursor_hittest(true)?
+        // }
+        self.camera_controller
+            .update_camera(&mut self.camera, delta_time);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
         let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
-                * old_position)
-                .into();
+        self.light_uniform.position = (cgmath::Quaternion::from_axis_angle(
+            (0.0, 1.0, 0.0).into(),
+            cgmath::Deg(60.0 * delta_time.as_secs_f32()),
+        ) * old_position)
+            .into();
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
-        )
+        );
+        self.window.request_redraw();
+        Ok(())
     }
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
-        self.camera.aspect = self.config.width as f32 / self.config.height as f32;
+        self.projection.resize(new_size.width, new_size.height);
         self.depth_texture =
             Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
     }
@@ -482,5 +495,11 @@ impl Renderer {
             },
             multiview: None,
         })
+    }
+    pub fn cursor_grab(&self) {
+        self.window
+            .set_cursor_grab(CursorGrabMode::Confined)
+            .or_else(|_e| self.window.set_cursor_grab(CursorGrabMode::Locked))
+            .unwrap();
     }
 }
