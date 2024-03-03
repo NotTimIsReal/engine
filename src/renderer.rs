@@ -1,14 +1,18 @@
-use std::time::Duration;
+use std::{rc::Rc, sync::Arc, time::Duration};
 
 use crate::{
     camera::{Camera, CameraController, CameraUniform, Projection},
     model::{self, Vertex},
     resources,
+    text::TextEngine,
     textures::Texture,
 };
 use bytemuck;
 use cgmath::prelude::*;
-use wgpu::{self, util::DeviceExt};
+use glyphon::{
+    Color, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer,
+};
+use wgpu::{self, util::DeviceExt, DepthStencilState, MultisampleState, TextureFormat};
 use winit::window::CursorGrabMode;
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
@@ -80,12 +84,11 @@ impl InstanceRaw {
     }
 }
 
-pub struct Renderer {
+pub struct Renderer<'a> {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    surface: wgpu::Surface,
-    window: winit::window::Window,
+    surface: wgpu::Surface<'a>,
     render_pipeline: wgpu::RenderPipeline,
     camera: Camera,
     camera_uniform: CameraUniform,
@@ -100,6 +103,12 @@ pub struct Renderer {
     light_uniform: LightUniform,
     light_render_pipeline: wgpu::RenderPipeline,
     projection: Projection,
+    window: Arc<winit::window::Window>,
+
+    text_engine: TextEngine,
+
+    text_renderer: TextRenderer,
+    atlas: TextAtlas,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -109,10 +118,11 @@ struct LightUniform {
     color: [f32; 3],
     _padding2: u32,
 }
-impl Renderer {
-    pub async fn new(window: winit::window::Window) -> Self {
+impl<'a> Renderer<'a> {
+    pub async fn new(window: Arc<winit::window::Window>) -> Self {
         let instance = wgpu::Instance::default();
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let surface = instance.create_surface(window.clone()).unwrap();
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -125,8 +135,8 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
                 },
                 None,
             )
@@ -147,6 +157,7 @@ impl Renderer {
             present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
+            desired_maximum_frame_latency: 1,
         };
         surface.configure(&device, &config);
         let light_uniform = LightUniform {
@@ -303,7 +314,7 @@ impl Renderer {
         };
         let obj_model =
             resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout).unwrap();
-        let camera_controller = CameraController::new(40.0, 1.0);
+        let camera_controller = CameraController::new(1000.0, 10.0);
         const SPACE_BETWEEN: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW)
             .flat_map(|z| {
@@ -331,10 +342,25 @@ impl Renderer {
             contents: bytemuck::cast_slice(&instance_data),
             usage: wgpu::BufferUsages::VERTEX,
         });
+        let mut atlas = TextAtlas::new(&device, &queue, config.format);
+
+        let mut text_engine = TextEngine::new();
+        let text_renderer = TextRenderer::new(
+            &mut atlas,
+            &device,
+            MultisampleState::default(),
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+        );
+        text_engine.add_buffer(30.0, 42.0);
         Self {
             device,
             queue,
-            window,
             surface,
             config,
             render_pipeline,
@@ -351,10 +377,12 @@ impl Renderer {
             instance_buffer,
             depth_texture,
             projection,
+            window,
+            atlas,
+
+            text_renderer,
+            text_engine,
         }
-    }
-    pub fn window(&self) -> &winit::window::Window {
-        &self.window
     }
     pub fn render(&mut self) {
         let surface_texture = self.surface.get_current_texture().unwrap();
@@ -369,12 +397,7 @@ impl Renderer {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.3,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
                     view: &surface_texture_view,
@@ -391,6 +414,7 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
             use model::DrawModel;
@@ -408,9 +432,27 @@ impl Renderer {
                 &self.camera_bind_group,
                 &self.light_bind_group,
             );
+            self.text_engine.set_text(
+                std::format!("Hell World ").as_str(),
+                [255, 128, 200, 255],
+                self.window.scale_factor(),
+                &self.config,
+                0,
+            );
+
+            self.text_engine.render(
+                0,
+                &mut self.text_renderer,
+                &self.device,
+                &self.queue,
+                &mut self.atlas,
+                &self.config,
+                &mut render_pass,
+            );
         }
         self.queue.submit([encoder.finish()]);
         surface_texture.present();
+        self.atlas.trim();
     }
     pub fn update(&mut self, delta_time: Duration) -> Result<(), anyhow::Error> {
         // if self.window.has_focus() {

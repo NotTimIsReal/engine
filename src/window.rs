@@ -1,3 +1,5 @@
+use std::{rc::Rc, sync::Arc};
+
 use crate::{renderer::Renderer, Plugin};
 use winit::{
     event::{DeviceEvent, ElementState, Event, WindowEvent},
@@ -9,13 +11,14 @@ use winit::{
     window::{CursorGrabMode, Fullscreen, WindowBuilder},
 };
 
-pub struct Engine {
-    renderer: Renderer,
+pub struct Engine<'a> {
+    renderer: Renderer<'a>,
     event_loop: EventLoop<()>,
     plugins: Vec<Box<dyn Plugin>>,
+    window: Arc<winit::window::Window>,
 }
-impl Engine {
-    pub async fn new() -> Engine {
+impl<'a> Engine<'a> {
+    pub async fn new() -> Engine<'a> {
         let event_loop = EventLoop::new().unwrap();
         let window = WindowBuilder::new()
             .with_title("Game")
@@ -30,16 +33,18 @@ impl Engine {
             .unwrap();
         #[cfg(not(target_os = "macos"))]
         window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
-
-        let renderer = Renderer::new(window).await;
+        let window = Arc::new(window);
+        let renderer = Renderer::new(window.clone()).await;
         let plugins = vec![];
         Engine {
             renderer,
             event_loop,
             plugins,
+            window: window,
         }
         //depending on the platform, use vulkan,opengl or metal
     }
+    //TODO: plugins
     pub fn add_plugin(&mut self, plugin: Box<dyn Plugin>) {
         self.plugins.push(plugin);
     }
@@ -47,15 +52,15 @@ impl Engine {
         for plugin in self.plugins.iter() {
             plugin.init();
         }
+
         self.event_loop
             .run(move |event, elwt| {
                 let time_now = std::time::Instant::now();
                 let mainevent = &event;
-                self.renderer
-                    .window()
-                    .set_fullscreen(Some(Fullscreen::Borderless(
-                        self.renderer.window().current_monitor(),
-                    )));
+
+                self.window
+                    .set_fullscreen(Some(Fullscreen::Borderless(self.window.current_monitor())));
+
                 match mainevent {
                     Event::DeviceEvent { event, .. } => match event {
                         DeviceEvent::MouseMotion { delta } => {
@@ -131,14 +136,11 @@ impl Engine {
                     }
                     _ => {}
                 }
+                //spawn code below in a different thread
                 self.renderer.update(time_now.elapsed()).unwrap();
                 self.renderer.render();
-                // std::thread::sleep(std::time::Duration::from_millis(16 / 2));
-                let time_elapsed = time_now.elapsed();
-                let avg_fps: f64 = 1.0 / (time_elapsed.as_secs_f64());
-                //only print when build config is debug
-                //#[cfg(debug_assertions)]
-                //println!("FPS: {}", avg_fps.round());
+
+                let avg_fps: f64 = 1.0 / (time_now.elapsed().as_secs_f64());
             })
             .unwrap();
         //cleanup

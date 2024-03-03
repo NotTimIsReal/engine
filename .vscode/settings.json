@@ -1,8 +1,7 @@
 {
-    "cSpell.words": [
-        "bytemuck",
-        "texcoords",
-        "tobj",
-        "wgpu"
-    ]
+  "cSpell.words": ["bytemuck", "texcoords", "tobj", "wgpu"],
+  "rust-analyzer.check.extraArgs": [
+    "--target-dir",
+    "${workspaceFolder}/target/check"
+  ]
 }

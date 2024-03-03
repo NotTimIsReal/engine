@@ -174,15 +174,15 @@ impl CameraController {
         let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        camera.position.z += -(self.amount_forward - self.amount_backward) * self.speed * 10.0 * dt;
-        camera.position.x += (self.amount_right - self.amount_left) * self.speed * 10.0 * dt;
+        camera.position += (self.amount_forward - self.amount_backward) * self.speed * dt * forward;
+        camera.position += (self.amount_right - self.amount_left) * self.speed * dt * right;
 
         let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
         let scrollward =
             Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
-        camera.position.y += (self.amount_up - self.amount_down) * self.speed * 10.0 * dt;
+        camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
         // camera.position.y += (self.amount_up - self.amount_down) * self.speed * 1000.0 * dt;
         // let yaw = Rad(self.rotate_horizontal * self.sensitivity / 100.0);
         // let pitch = Rad(-self.rotate_vertical * self.sensitivity / 100.0);
@@ -192,8 +192,8 @@ impl CameraController {
         // } else {
         //     pitch
         // };
-        camera.yaw += Rad(self.rotate_horizontal * self.sensitivity * dt * 10.0);
-        camera.pitch += Rad(-self.rotate_vertical * self.sensitivity * dt * 10.0);
+        camera.yaw += Rad(self.rotate_horizontal * self.sensitivity * dt);
+        camera.pitch += Rad(-self.rotate_vertical * self.sensitivity * dt);
 
         // if self.rotate_vertical != 0.0 && self.rotate_horizontal != 0.0 {
         //     println!(

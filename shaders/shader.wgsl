@@ -93,7 +93,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32>{
     let diff_color=light.color*diff_str;
 
     let half_dir=normalize(light_dir+view_dir);
-    let spec_str=pow(max(dot(tan_normal,half_dir),0.0),32.0);
+    let spec_str=pow(max(dot(tan_normal,half_dir),0.0),64.0);
     let spec_color=spec_str*light.color;
     let result=(amb_color+diff_color+spec_color)*obj_color.xyz;
     return vec4<f32>(result,obj_color.a);

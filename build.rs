@@ -1,7 +1,7 @@
 use std::{env, fs, path};
 use tar;
 fn main() {
-    println!("cargo:rerun-if-changed=assets");
+    println!("cargo:rerun-if-changed=assets/");
     println!("cargo:warning=Building Assets");
     if fs::metadata("assets").is_err() {
         fs::create_dir("assets").unwrap();
