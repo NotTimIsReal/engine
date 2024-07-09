@@ -363,6 +363,11 @@ impl<'a> Renderer<'a> {
         );
         text_engine.add_buffer(30.0, 42.0);
         let hdr_pipeline = hdr::HdrPipeline::new(&device, &config);
+        let hdr_loader = resources::HdrLoader::new(&device);
+        let sky = resources::read_game_assets("sky.hdr").unwrap();
+        let sky = sky.as_slice();
+        let sky_texture =
+            hdr_loader.from_ecuirectangular_bytes(&device, &queue, sky, 1080, Some("Sky Texture"));
         Self {
             device,
             queue,
