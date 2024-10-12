@@ -17,6 +17,8 @@ fn main() {
         .to_string();
     let p = path::Path::new(&out_dir).join(profile).join("game.assets");
     let archive: std::fs::File;
+    //remove the exisitng game.assets file if it already exists
+    //TODO: should make it only update the changed assets in the future
     if fs::metadata(&p).is_ok() {
         fs::remove_file(&p).unwrap();
     }

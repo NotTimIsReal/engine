@@ -1,10 +1,10 @@
 use std::f32::consts::FRAC_PI_2;
 use std::time::Duration;
 
-use cgmath::{self, Vector3};
+use cgmath::{self, Matrix, SquareMatrix, Vector3};
 use cgmath::{InnerSpace, Rad};
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, MouseScrollDelta};
+use winit::event::MouseScrollDelta;
 use winit::keyboard::{self, Key, ModifiersState};
 #[rustfmt::skip]
 const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -64,27 +64,40 @@ impl Projection {
         self.aspect = width as f32 / height as f32;
     }
     pub fn calc_matrix(&self) -> cgmath::Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
+        //OPENGL_TO_WGPU_MATRIX *
+        cgmath::perspective(self.fovy, self.aspect, self.znear, self.zfar)
     }
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
-    view_proj: [[f32; 4]; 4],
     view_position: [f32; 4],
+    view: [[f32; 4]; 4],
+    view_proj: [[f32; 4]; 4],
+    inv_proj: [[f32; 4]; 4],
+    inv_view: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
         use cgmath::SquareMatrix;
         Self {
-            view_proj: cgmath::Matrix4::identity().into(),
             view_position: [0.0; 4],
+            view: cgmath::Matrix4::identity().into(),
+            view_proj: cgmath::Matrix4::identity().into(),
+            inv_proj: cgmath::Matrix4::identity().into(),
+            inv_view: cgmath::Matrix4::identity().into(),
         }
     }
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
+        let proj = projection.calc_matrix();
+        let view = camera.calc_matrix();
+        let view_proj = proj * view;
+        self.view = view.into();
+        self.view_proj = view_proj.into();
+        self.inv_proj = proj.invert().unwrap().into();
+        self.inv_view = view.transpose().into();
     }
 }
 #[derive(PartialEq, Debug, Copy, Clone)]

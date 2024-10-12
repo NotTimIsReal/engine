@@ -65,7 +65,7 @@ fn compute_equireact_to_cubemap(
     let cube_uv=vec2<f32>(gid.xy)/dst_dimensions*2.0-1.0;
     let face=FACES[gid.z];
     let spherical=normalize(face.forward + face.right * cube_uv.x + face.up * cube_uv.y);
-    let inv_atan=vev(0.1591,0.3183);
+    let inv_atan=vec2(0.1591,0.3183);
      let eq_uv = vec2(atan2(spherical.z, spherical.x), asin(spherical.y)) * inv_atan + 0.5;
     let eq_pixel = vec2<i32>(eq_uv * vec2<f32>(textureDimensions(src)));
 

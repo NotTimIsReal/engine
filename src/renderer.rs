@@ -111,6 +111,8 @@ pub struct Renderer<'a> {
     text_renderer: TextRenderer,
     atlas: TextAtlas,
     hdr_pipeline: hdr::HdrPipeline,
+    sky_pipeline: wgpu::RenderPipeline,
+    environment_bind_group: wgpu::BindGroup,
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -137,7 +139,7 @@ impl<'a> Renderer<'a> {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    required_features: wgpu::Features::all_webgpu_mask(),
+                    required_features: adapter.features(),
                     required_limits: wgpu::Limits::downlevel_defaults(),
                 },
                 None,
@@ -366,8 +368,64 @@ impl<'a> Renderer<'a> {
         let hdr_loader = resources::HdrLoader::new(&device);
         let sky = resources::read_game_assets("sky.hdr").unwrap();
         let sky = sky.as_slice();
-        let sky_texture =
-            hdr_loader.from_ecuirectangular_bytes(&device, &queue, sky, 1080, Some("Sky Texture"));
+        let sky_texture = hdr_loader
+            .from_ecuirectangular_bytes(&device, &queue, sky, 1080, Some("Sky Texture"))
+            .expect("Failed to load sky texture");
+
+        let environment_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Environment Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::Cube,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let environment_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Environment Bind Group"),
+            layout: &environment_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler()),
+                },
+            ],
+        });
+        let sky_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Sky Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &environment_layout],
+                push_constant_ranges: &[],
+            });
+            let shader = wgpu::include_wgsl!("../shaders/sky.wgsl");
+            create_render_pipeline(
+                &device,
+                &layout,
+                hdr_pipeline.format(),
+                Some(Texture::DEPTH_FORMAT),
+                &[],
+                shader,
+                wgpu::PrimitiveTopology::TriangleList,
+                "Sky Pipeline",
+            )
+        };
         Self {
             device,
             queue,
@@ -393,6 +451,8 @@ impl<'a> Renderer<'a> {
             text_renderer,
             text_engine,
             hdr_pipeline,
+            environment_bind_group,
+            sky_pipeline,
         }
     }
     pub fn render(&mut self) {
@@ -452,7 +512,7 @@ impl<'a> Renderer<'a> {
             );
 
             self.text_engine.set_text(
-                std::format!("Hell World ").as_str(),
+                std::format!("FPS {:?} ", 60).as_str(),
                 [255, 128, 200, 255],
                 self.window.scale_factor(),
                 &self.config,
@@ -558,7 +618,7 @@ pub fn create_render_pipeline(
         depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
             format,
             depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
+            depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
