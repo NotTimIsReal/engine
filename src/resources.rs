@@ -319,6 +319,7 @@ impl HdrLoader {
         let dst_view = dst.texture().create_view(&wgpu::TextureViewDescriptor {
             label,
             dimension: Some(wgpu::TextureViewDimension::D2Array),
+            array_layer_count: Some(6),
             ..Default::default()
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

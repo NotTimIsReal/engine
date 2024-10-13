@@ -389,11 +389,12 @@ impl<'a> Renderer<'a> {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                         count: None,
                     },
                 ],
             });
+
         let environment_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Environment Bind Group"),
             layout: &environment_layout,
@@ -404,7 +405,7 @@ impl<'a> Renderer<'a> {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler()),
+                    resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
                 },
             ],
         });
@@ -502,6 +503,10 @@ impl<'a> Renderer<'a> {
                 &self.camera_bind_group,
                 &self.light_bind_group,
             );
+            render_pass.set_pipeline(&self.sky_pipeline);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.environment_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
             render_pass.set_pipeline(&self.render_pipeline);
             use model::DrawModel;
             render_pass.draw_model_instanced(

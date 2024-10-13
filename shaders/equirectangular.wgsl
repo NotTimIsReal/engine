@@ -16,7 +16,7 @@ var dst:texture_storage_2d_array<rgba32float,write>;
 
 @compute
 @workgroup_size(16,16,1)
-fn compute_equireact_to_cubemap(
+fn compute_equirect_to_cubemap(
     @builtin(global_invocation_id)
     gid: vec3<u32>,
 ) {
